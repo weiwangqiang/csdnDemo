@@ -15,6 +15,8 @@ import java.util.TimeZone;
  * String format = "yyyy/MM/dd HH:mm:ss";
  * PersianCalender persian = new PersianCalender(format);
  * persian.formatPersianCalender();
+ *
+ * @see  https://weiwangqiang.github.io/2019/12/22/persian-calender-by-java
  */
 public class PersianCalender extends GregorianCalendar {
 
