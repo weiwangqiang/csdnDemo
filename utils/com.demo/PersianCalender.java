@@ -1,6 +1,7 @@
-package demo.com.rtldemo.utils;
 
 import android.text.TextUtils;
+
+import com.cvte.tv.common.utils.StringUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -10,19 +11,17 @@ import java.util.TimeZone;
 
 /**
  * 波斯日历
- * create by wei on 2019-12-19
  * demo:
  * String format = "yyyy/MM/dd HH:mm:ss";
  * PersianCalender persian = new PersianCalender(format);
  * persian.formatPersianCalender();
- *
- * @see  https://weiwangqiang.github.io/2019/12/22/persian-calender-by-java
  */
 public class PersianCalender extends GregorianCalendar {
 
     private static final double PERSIAN_EPOCH = 1948320.5;
     private static final double GREGORIAN_EPOCH = 1721425.5;
-    private Locale mLocale = Locale.US;
+    private Locale mDefaultLocale = Locale.US;
+    private int MONTHS = 12;
 
     public static int[] persianDaysInMonth = {31, 31, 31, 31, 31, 31, 30,
         30, 30, 30, 30, 29};
@@ -32,7 +31,7 @@ public class PersianCalender extends GregorianCalendar {
 
     public static int DAY_OF_YEAR = 365;
     private String format;
-    private SimpleDateFormat simpleDateFormat = new SimpleDateFormat("", mLocale);
+    private SimpleDateFormat simpleDateFormat = new SimpleDateFormat("", mDefaultLocale);
 
     // 波斯月
     public static final String[] month_str = {"Farvardin", "Ordibehesht", "Khordad",
@@ -45,11 +44,7 @@ public class PersianCalender extends GregorianCalendar {
     }
 
     public PersianCalender(String format) {
-        this(Locale.UK, format);
-    }
-
-    public PersianCalender(Locale locale, String format) {
-        this.mLocale = locale;
+        super();
         this.format = format;
     }
 
@@ -62,6 +57,7 @@ public class PersianCalender extends GregorianCalendar {
     }
 
     private double persianToJd(int year, int month, int day) {
+
         int epbase = year - 474;
         double epyear = 474 + mod(epbase, 2820);
         if (month > 7) {
@@ -78,7 +74,7 @@ public class PersianCalender extends GregorianCalendar {
         int v;
         if (month <= 2) {
             v = 0;
-        } else if (isLeapYearCalender(year)) {
+        } else if (isLeapGregorian(year)) {
             v = -1;
         } else {
             v = -2;
@@ -96,12 +92,34 @@ public class PersianCalender extends GregorianCalendar {
      * @param year 年
      * @return 是否是闰年
      */
-    public boolean isLeapYearCalender(int year) {
+    public boolean isLeapGregorian(int year) {
         if (((year % 4) == 0 && (year % 100) != 0) || (year % 400) == 0) {
             return true;
         } else {
             return false;
         }
+    }
+
+    /**
+     * 用于判断波斯年是否是闰年，公式是：
+     * 将这一年加38后，乘以31，再除以128。当结果的小数部分大于或等于0.31时，所指的这一年是一个平年。
+     * 另一方面，如果小于0.31，则这一年是闰年，但是如果连续两年小于0.31，则第一年是闰年而第二年是平年。
+     *
+     * @param persianYear 波斯年
+     * @return 是否闰年
+     */
+    public boolean isLeapPersian(int persianYear) {
+        double compareValue = 0.31;
+        double result = (persianYear + 38) * 31 % 128;
+        if (result / 128 >= compareValue) {
+            return false;
+        }
+        double preYear = (persianYear - 1 + 38) * 31 % 128;
+        if (preYear / 128 < compareValue) {
+            // 连续两年是小于0.31,第一年是闰年而第二年是平年
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -131,7 +149,7 @@ public class PersianCalender extends GregorianCalendar {
         int leapadj = 0;
         if (wjd < gregorianToJd(year, 3, 1)) {
             leapadj = 0;
-        } else if (isLeapYearCalender(year)) {
+        } else if (isLeapGregorian(year)) {
             leapadj = 1;
         } else {
             leapadj = 2;
@@ -208,9 +226,9 @@ public class PersianCalender extends GregorianCalendar {
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH) + 1,
             calendar.get(Calendar.DAY_OF_MONTH));
-        String persianDate = formatDate.replace("yyyy", String.format(mLocale, "%d", persian.getYear()));
-        persianDate = persianDate.replace("MM", String.format(mLocale, "%02d", persian.getMonth()));
-        persianDate = persianDate.replace("dd", String.format(mLocale, "%02d", persian.getDate()));
+        String persianDate = formatDate.replace("yyyy", String.valueOf(persian.getYear()));
+        persianDate = persianDate.replace("MM", StringUtils.format("%02d", persian.getMonth()));
+        persianDate = persianDate.replace("dd", StringUtils.format("%02d", persian.getDate()));
         simpleDateFormat.applyPattern(persianDate);
         simpleDateFormat.setTimeZone(TimeZone.getDefault());
         return simpleDateFormat.format(timeInMillis);
@@ -231,23 +249,17 @@ public class PersianCalender extends GregorianCalendar {
                 super.add(field, amount);
                 break;
             case YEAR:
-            case MONTH:
-            case DAY_OF_MONTH:
                 // 年月日的加减需要转为波斯日历再加减，完成后再转为公历
-                YearMonthDate yearMonthDate = gregorianToPersian(get(YEAR),
-                    get(MONDAY) + 1, get(DAY_OF_MONTH));
-                if (field == YEAR) {
-                    addYear(yearMonthDate, amount);
-                    break;
-                }
-                if (field == MONTH) {
-                    setMonth(yearMonthDate, amount);
-                    break;
-                }
-                if (field == DAY_OF_MONTH) {
-                    setDayOfMonth(yearMonthDate, amount);
-                    break;
-                }
+                addYear(gregorianToPersian(get(YEAR), get(MONTH) + 1, get(DAY_OF_MONTH)),
+                        amount);
+                break;
+            case MONTH:
+                addMonth(gregorianToPersian(get(YEAR), get(MONTH) + 1, get(DAY_OF_MONTH)),
+                        amount);
+                break;
+            case DAY_OF_MONTH:
+                addDayOfMonth(gregorianToPersian(get(YEAR), get(MONTH) + 1, get(DAY_OF_MONTH)),
+                        amount);
                 break;
         }
     }
@@ -275,16 +287,29 @@ public class PersianCalender extends GregorianCalendar {
      * @param yearMonthDate 波斯年月日
      * @param amount        加减的值
      */
-    private void setMonth(YearMonthDate yearMonthDate, int amount) {
-        int addedMonthIndex = yearMonthDate.getMonth() + amount - 1;
-        yearMonthDate.setMonth((addedMonthIndex % 12 + 1));
-        yearMonthDate.setYear(yearMonthDate.getYear() + addedMonthIndex / 12);
-        if (persianDaysInMonth[yearMonthDate.getMonth() - 1] < yearMonthDate.getDate()) {
-            yearMonthDate.setDate(persianDaysInMonth[yearMonthDate.getMonth() - 1]);
+    private void addMonth(YearMonthDate yearMonthDate, int amount) {
+        int year = yearMonthDate.getYear();
+        int month = yearMonthDate.getMonth();
+        int day = yearMonthDate.getDate();
+        int addedMonthIndex = month + amount - 1;
+        while (addedMonthIndex < 0) {
+            addedMonthIndex += MONTHS;
+            year--;
         }
-        yearMonthDate = persianToGregorian(yearMonthDate.getYear(),
-            yearMonthDate.getMonth(),
-            yearMonthDate.getDate());
+        if (addedMonthIndex >= MONTHS) {
+            year += (addedMonthIndex / MONTHS);
+            addedMonthIndex %= MONTHS;
+        }
+        month = addedMonthIndex + 1;
+        if (persianDaysInMonth[addedMonthIndex] < day) {
+            if (addedMonthIndex == (persianDaysInMonth.length - 1) && isLeapPersian(year)) {
+                // 加上值后的月份是12月，并且当前年是闰年
+                day = persianDaysInMonth[addedMonthIndex] + 1;
+            } else {
+                day = persianDaysInMonth[addedMonthIndex];
+            }
+        }
+        yearMonthDate = persianToGregorian(year, month, day);
         set(Calendar.YEAR, yearMonthDate.getYear());
         set(Calendar.MONTH, yearMonthDate.getMonth() - 1);
         set(Calendar.DAY_OF_MONTH, yearMonthDate.getDate());
@@ -296,7 +321,7 @@ public class PersianCalender extends GregorianCalendar {
      * @param yearMonthDate 波斯年月日
      * @param amount        加减的值
      */
-    private void setDayOfMonth(YearMonthDate yearMonthDate, int amount) {
+    private void addDayOfMonth(YearMonthDate yearMonthDate, int amount) {
         // 当前是整年第几天
         int curDaysInYear = yearMonthDate.getMonth() == 1
             ? 0 : persianDaysOfYear[yearMonthDate.getMonth() - 2];
@@ -307,7 +332,7 @@ public class PersianCalender extends GregorianCalendar {
             // 加上 amount 有可能变为下一年
             while (true) {
                 int curYear = yearMonthDate.getYear();
-                int daysOfYear = DAY_OF_YEAR + (isLeapYearCalender(curYear) ? 1 : 0);
+                int daysOfYear = DAY_OF_YEAR + (isLeapPersian(curYear) ? 1 : 0);
                 if (addedDays <= daysOfYear) {
                     break;
                 }
@@ -317,7 +342,7 @@ public class PersianCalender extends GregorianCalendar {
         } else {
             while (addedDays <= 0) {
                 int curYear = yearMonthDate.getYear() - 1;
-                int daysOfYear = DAY_OF_YEAR + (isLeapYearCalender(curYear) ? 1 : 0);
+                int daysOfYear = DAY_OF_YEAR + (isLeapPersian(curYear) ? 1 : 0);
                 addedDays += daysOfYear;
                 yearMonthDate.setYear(curYear);
             }
@@ -351,8 +376,11 @@ public class PersianCalender extends GregorianCalendar {
             this.date = date;
         }
 
+        // 实际的年
         private int year;
+        // 实际的月
         private int month;
+        // 实际的日
         private int date;
 
         public int getYear() {
