@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation project(path: ':api')
+    // 用来生成META-INF/services/javax.annotation.processing.Processor文件
+    implementation 'com.google.auto.service:auto-service:1.0-rc2'
+    // 用于创建Java文件
+    implementation 'com.squareup:javapoet:1.12.1'
+    // 导入javaX包
+    targetCompatibility = '1.8'
+    sourceCompatibility = '1.8'
+}

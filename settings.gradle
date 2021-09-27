@@ -1,0 +1,4 @@
+rootProject.name = "AnnotationDemo"
+include ':app'
+include ':butterKnife'
+include ':api'
