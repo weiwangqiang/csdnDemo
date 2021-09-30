@@ -42,10 +42,10 @@ public class ButterKnifeProcessor extends AbstractProcessor {
     private Messager mMessager;
     // 用于解析 Element
     private Elements mElements;
-    // 存储某个类下面对应的BindModel
+    // 存储每个类下面对应的BindView
     private Map<TypeElement, List<BindModel>> mTypeElementMap = new HashMap<>();
-    // 存储id绑定的方法，即OnClick
-    private Map<Integer, Element> mOnclickElementMap = new HashMap<>();
+    // 存储m每个类中，id绑定的方法，即OnClick
+    private Map<TypeElement, Map<Integer, Element>> mOnclickElementMap = new HashMap<>();
     // 用于将创建的java程序输出到相关路径下。
     private Filer mFiler;
 
@@ -79,56 +79,74 @@ public class ButterKnifeProcessor extends AbstractProcessor {
                            RoundEnvironment roundEnv) {
         mMessager.printMessage(Diagnostic.Kind.NOTE, "===============process start =============");
         mTypeElementMap.clear();
-        // Process each @BindView element.
+        // 解析 @BindView element.
         for (Element element : roundEnv.getElementsAnnotatedWith(BindView.class)) {
             verifyAnnotation(element, BindView.class, ElementKind.FIELD);
+            // 可以理解为类的element
             TypeElement enclosingElement = (TypeElement) element.getEnclosingElement();
+            // 获取class 完整name，比如：com.example.annotation.buildtime.MainActivity
             Name qualifiedName = enclosingElement.getQualifiedName();
+            // 获取变量名,比如 button1
             Name simpleName = element.getSimpleName();
 
-            // Assemble information on the field.
+            //获取到view的id
             int id = element.getAnnotation(BindView.class).value();
             String content = String.format("====> qualifiedName: %s simpleName: %s id: %d"
                     , qualifiedName, simpleName, id);
             mMessager.printMessage(Diagnostic.Kind.NOTE, content);
             List<BindModel> modelList = mTypeElementMap.get(enclosingElement);
             if (modelList == null) {
+                // 每个activity会有多个BindView注解
                 modelList = new ArrayList<>();
             }
             modelList.add(new BindModel(element, id));
             mTypeElementMap.put(enclosingElement, modelList);
         }
-
+        // 解析 @Onclick element.
         for (Element element : roundEnv.getElementsAnnotatedWith(Onclick.class)) {
             verifyAnnotation(element, Onclick.class, ElementKind.METHOD);
+            TypeElement enclosingElement = (TypeElement) element.getEnclosingElement();
+            Map<Integer, Element> methods = mOnclickElementMap.get(enclosingElement);
+            if (methods == null) {
+                // 每个类会有多个Onclick注解
+                methods = new HashMap<>();
+            }
             int[] ids = element.getAnnotation(Onclick.class).value();
             for (int id : ids) {
-                mOnclickElementMap.put(id, element);
+                // 将id与方法绑定
+                methods.put(id, element);
             }
+            // 将methods 与类绑定
+            mOnclickElementMap.put(enclosingElement, methods);
         }
-
+        // 遍历类
         mTypeElementMap.forEach((typeElement, bindModels) -> {
+            // 获取包名
             String packageName = mElements.getPackageOf(typeElement)
                     .getQualifiedName().toString();
             String className = typeElement.getSimpleName().toString();
+            // 生成对应的_ViewBind 类名
             String bindClass = className + "_ViewBind";
             // 生成构造函数
             MethodSpec.Builder builder = MethodSpec.constructorBuilder()
                     .addModifiers(Modifier.PUBLIC) // 声明为public
                     .addParameter(ClassName.bestGuess(className), "target"); // 添加构造参数
             bindModels.forEach(model -> {
-                // 构造函数内添加代码
+                // 构造函数内添加findViewById代码
                 builder.addStatement("target.$L = ($L)target.findViewById($L)",
                         model.getViewFieldName(), model.getViewFieldType(), model.getResId());
             });
             String viewPath = "android.view.View";
-            mOnclickElementMap.forEach((id, element) -> {
-                // 构造函数内添加代码
-                builder.addStatement("(($L) target.findViewById($L)).setOnClickListener((view) -> {\n" +
-                                "            target.$L();\n" +
-                                "        })",
-                        viewPath, id, element.getSimpleName().toString());
-            });
+            Map<Integer, Element> clickMethods = mOnclickElementMap.get(typeElement);
+            if (clickMethods != null) {
+                clickMethods.forEach((id, element) -> {
+                    // 构造函数内添加setOnClickListener代码
+                    builder.addStatement("(($L) target.findViewById($L)).setOnClickListener((view) -> {\n" +
+                                    "            target.$L();\n" +
+                                    "        })",
+                            viewPath, id, element.getSimpleName().toString());
+                });
+            }
             // 构建类
             TypeSpec typeSpec = TypeSpec.classBuilder(bindClass)
                     .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
